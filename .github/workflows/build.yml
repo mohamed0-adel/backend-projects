@@ -1,0 +1,60 @@
+name: Build and verify APIs
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-migrate:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: 'Portfolio_Test_Password_2026!'
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "bash -c '</dev/tcp/localhost/1433'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 20
+          --health-start-period 30s
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore projects.sln
+
+      - name: Build solution
+        run: dotnet build projects.sln --configuration Release --no-restore
+
+      - name: Install Entity Framework CLI
+        run: dotnet tool install --global dotnet-ef --version 10.0.15
+
+      - name: Apply TaskTracker migrations
+        working-directory: TaskTracker.Api
+        env:
+          ConnectionStrings__Default: "Server=localhost,1433;Database=TaskTracker_CI;User Id=sa;Password=Portfolio_Test_Password_2026!;TrustServerCertificate=True;Encrypt=True"
+        run: dotnet ef database update
+
+      - name: Apply ExpenseTracker migrations
+        working-directory: ExpenseTracker.Api
+        env:
+          ConnectionStrings__Default: "Server=localhost,1433;Database=ExpenseTracker_CI;User Id=sa;Password=Portfolio_Test_Password_2026!;TrustServerCertificate=True;Encrypt=True"
+        run: dotnet ef database update
+
+      - name: Apply UrlShortener migrations
+        working-directory: UrlShortener.Api
+        env:
+          ConnectionStrings__Default: "Server=localhost,1433;Database=UrlShortener_CI;User Id=sa;Password=Portfolio_Test_Password_2026!;TrustServerCertificate=True;Encrypt=True"
+        run: dotnet ef database update
